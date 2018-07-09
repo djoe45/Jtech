@@ -1,10 +1,14 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections;
+using System.Collections.Generic;
+//using System.Reflection; // enable for ListComponentDebug
+using System.Linq;
 using UnityEngine;
+using Oxide.Core.Plugins;
+using Oxide.Game.Rust.Cui;
+using Oxide.Core.Libraries.Covalence;
 using Oxide.Plugins.JtechCore;
 using Oxide.Plugins.JtechCore.Util;
-using System;
-using System.Linq;
-using Oxide.Game.Rust.Cui;
 
 namespace Oxide.Plugins.JtechDeployables {
 
@@ -59,10 +63,10 @@ namespace Oxide.Plugins.JtechDeployables {
 		private Mode mode;
 
 		private static float pipesegdist = 3;
-		private static Vector3 pipefightoffset = new Vector3(0.001f, 0, 0.001f); // every other pipe segment is offset by this to remove z fighting
+		private static Vector3 pipefightoffset = new Vector3(0.0001f, 0.0001f, 0); // every other pipe segment is offset by this to remove z fighting
 
 
-		public new static bool CanStartPlacing(UserInfo userInfo) {
+        public new static bool CanStartPlacing(UserInfo userInfo) {
 			return true;
 		}
 
@@ -177,7 +181,7 @@ namespace Oxide.Plugins.JtechDeployables {
 			destContainerIconUrl = Icons.GetContainerIconURL(destcont, 100);
 
 			isWaterPipe = sourcecont is LiquidContainer;
-			destisstartable = isStartable(destcont);
+			destisstartable = IsStartable(destcont);
 			flowrate = flowrates[int.Parse(data.Get("grade", "0"))];
 			mode = (Mode) int.Parse(data.Get("mode", "0"));
 
@@ -185,7 +189,7 @@ namespace Oxide.Plugins.JtechDeployables {
 			endPosition = destcont.CenterPoint() + ContainerOffset(destcont);
 
 			distance = Vector3.Distance(startPosition, endPosition);
-			Quaternion rotation = Quaternion.LookRotation(endPosition - startPosition) * Quaternion.Euler(90, 0, 0);
+			Quaternion rotation = Quaternion.LookRotation(endPosition - startPosition) * Quaternion.Euler(0, 0, 0);
 
 			//isStartable();
 
@@ -193,23 +197,23 @@ namespace Oxide.Plugins.JtechDeployables {
 
 			int segments = (int) Mathf.Ceil(distance / pipesegdist);
 			float segspace = (distance - pipesegdist) / (segments - 1);
-
-			for (int i = 0; i < segments; i++) {
+            startPosition = startPosition + ((rotation * Vector3.forward) * pipesegdist * 0.5f) + ((rotation * Vector3.down) * 0.7f);
+            for (int i = 0; i < segments; i++) {
 
 				// create pillar
 
 				BaseEntity ent;
 
 				if (i == 0) {
-					// the position thing centers the pipe if there is only one segment
-					ent = GameManager.server.CreateEntity("assets/prefabs/building core/pillar/pillar.prefab", (segments == 1) ? (startPosition + ((rotation * Vector3.up) * ((distance - pipesegdist) * 0.5f))) : startPosition, rotation);
-					SetMainParent((BaseCombatEntity) ent);
+                    // the position thing centers the pipe if there is only one segment
+                    ent = GameManager.server.CreateEntity("assets/prefabs/building core/wall.low/wall.low.prefab", (segments == 1) ? (startPosition + ((rotation * Vector3.up) * ((distance - pipesegdist) * 0.5f))) : startPosition, rotation);
+                    SetMainParent((BaseCombatEntity) ent);
 				} else {
-					ent = GameManager.server.CreateEntity("assets/prefabs/building core/pillar/pillar.prefab", Vector3.up * (segspace * i) + ((i % 2 == 0) ? Vector3.zero : pipefightoffset));
-					//ent = GameManager.server.CreateEntity("assets/prefabs/building core/pillar/pillar.prefab", startPosition);
-				}
+                    ent = GameManager.server.CreateEntity("assets/prefabs/building core/wall.low/wall.low.prefab", Vector3.forward * (segspace * i) + ((i % 2 == 0) ? Vector3.zero : pipefightoffset));
+                    //ent = GameManager.server.CreateEntity("assets/prefabs/building core/pillar/pillar.prefab", startPosition);
+                }
 
-				ent.enableSaving = false;
+                ent.enableSaving = false;
 
 				BuildingBlock block = ent.GetComponent<BuildingBlock>();
 
@@ -465,14 +469,14 @@ namespace Oxide.Plugins.JtechDeployables {
 			else if (e is BaseOven) {
 				string panel = e.GetComponent<BaseOven>().panelName;
 
-				if (panel == "largefurnace")
-					return Vector3.up * -1.5f;
-				else if (panel == "smallrefinery")
-					return e.transform.rotation * new Vector3(-1, 0, -0.1f);
-				else if (panel == "bbq")
-					return Vector3.up * 0.03f;
-				else
-					return Vector3.up * -0.3f;
+                if (panel == "largefurnace")
+                    return ContenersOffset.Largefurnace;
+                else if (panel == "smallrefinery")
+                    return e.transform.rotation * ContenersOffset.Refinery;
+                else if (panel == "bbq")
+                    return ContenersOffset.Bbq;
+                else
+                    return ContenersOffset.Furnace;
 				//} else if (e is ResourceExtractorFuelStorage) {
 				//if (e.GetComponent<StorageContainer>().panelName == "fuelstorage") {
 				//    return contoffset.pumpfuel;
@@ -480,19 +484,19 @@ namespace Oxide.Plugins.JtechDeployables {
 				//    return e.transform.rotation * contoffset.pumpoutput;
 				//}
 			} else if (e is AutoTurret) {
-				return Vector3.up * -0.58f;
-			} else if (e is SearchLight) {
-				return Vector3.up * -0.5f;
-			} else if (e is WaterCatcher) {
-				return Vector3.up * -0.6f;
-			} else if (e is LiquidContainer) {
+                return ContenersOffset.Turret;
+            } else if (e is SearchLight) {
+                return ContenersOffset.Searchlight;
+            } else if (e is WaterCatcher) {
+				return ContenersOffset.Smallwatercatcher;
+            } else if (e is LiquidContainer) {
 				if (e.GetComponent<LiquidContainer>()._collider.ToString().Contains("purifier"))
-					return Vector3.up * 0.25f;
-				return Vector3.up * 0.2f;
-			}
+					return ContenersOffset.Waterpurifier;
+                return ContenersOffset.Waterbarrel;
+            }
 			return Vector3.zero;
 		}
-		private bool isStartable(BaseEntity e) => e is BaseOven || e is Recycler || destchildid == 2;
+		private bool IsStartable(BaseEntity e) => e is BaseOven || e is Recycler || destchildid == 2;
 
 		
 
@@ -535,7 +539,7 @@ namespace Oxide.Plugins.JtechDeployables {
 			data.Set("sourcechildid", scid);
 			data.Set("destchildid", dcid);
 
-			destisstartable = isStartable(destcont);
+			destisstartable = IsStartable(destcont);
 
 			if (!destisstartable && mode == Mode.Fueling) {
 				mode = 0;
